@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Attendance-Ration Correlation System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="navbar">
+    <h2>Attendance-Ration Correlation System</h2>
+</div>
+
+<div class="container">
+
+    <div class="card">
+        <h1 class="heading">
+            Rural Student Attendance Monitoring
+        </h1>
+
+        <p>
+            A lightweight system connecting school attendance with ration distribution awareness.
+        </p>
+    </div>
+
+    <div class="home-buttons">
+
+        <div class="home-card">
+            <h2>Teacher Dashboard</h2>
+
+            <p>
+                Update and monitor student attendance.
+            </p>
+
+            <a href="/teacher">
+                <button>Open Dashboard</button>
+            </a>
+        </div>
+
+        <div class="home-card">
+            <h2>Panchayat Dashboard</h2>
+
+            <p>
+                Verify attendance during ration distribution.
+            </p>
+
+            <a href="/panchayat">
+                <button>Open Dashboard</button>
+            </a>
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>

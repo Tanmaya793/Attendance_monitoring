@@ -180,7 +180,7 @@ button:hover {
 }
 
 .attendance-medium {
-    background-color: #f59e0b;
+    background-color: rgb(220, 220, 72);
     color: white;
     padding: 6px 12px;
     border-radius: 20px;
@@ -188,7 +188,7 @@ button:hover {
 }
 
 .attendance-low {
-    background-color: #ef4444;
+    background-color: orange;
     color: white;
     padding: 6px 12px;
     border-radius: 20px;
@@ -196,7 +196,7 @@ button:hover {
 }
 
 .attendance-very-low {
-    background-color: #ff0000;
+    background-color: red;
     color: white;
     padding: 6px 12px;
     border-radius: 20px;
@@ -205,47 +205,66 @@ button:hover {
 
 @media screen and (max-width: 768px) {
 
+    body {
+        font-size: 14px;
+    }
+
     .navbar {
         flex-direction: column;
-        gap: 10px;
+        align-items: center;
         text-align: center;
         padding: 15px;
+        gap: 10px;
+    }
+
+    .navbar h2 {
+        font-size: 20px;
     }
 
     .nav-links {
-        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
     }
 
     .nav-links a {
-        display: inline-block;
-        margin: 5px 10px;
+        margin: 0;
+        font-size: 14px;
     }
 
     .container {
         width: 95%;
+        margin: 15px auto;
+    }
+
+    .card {
+        padding: 15px;
+        border-radius: 10px;
+    }
+
+    .heading {
+        font-size: 20px;
     }
 
     .home-buttons {
         flex-direction: column;
     }
 
-    .card {
-        padding: 18px;
+    .home-card {
+        padding: 20px;
     }
 
     select,
     input[type="text"] {
         width: 100%;
         margin-bottom: 10px;
+        font-size: 14px;
     }
 
     button {
         width: 100%;
-    }
-
-    .table th,
-    .table td {
-        padding: 10px;
+        padding: 12px;
         font-size: 14px;
     }
 
@@ -253,12 +272,37 @@ button:hover {
         grid-template-columns: 1fr;
     }
 
-    h1 {
+    .stat-box {
+        text-align: center;
+    }
+
+    .stat-box p {
         font-size: 24px;
     }
 
-    h2 {
-        font-size: 20px;
+    /* TABLE FIX */
+
+    .table-container {
+        overflow-x: auto;
+        width: 100%;
+    }
+
+    .table {
+        min-width: 700px;
+    }
+
+    .table th,
+    .table td {
+        padding: 10px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    /* Better checkbox scaling */
+
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
     }
 
 }

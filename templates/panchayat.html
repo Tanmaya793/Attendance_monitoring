@@ -74,28 +74,28 @@
                 <td>{{ s.Attendance }}%</td>
 
                 <td>
-                    {% if s.Attendance_Percentage >= 80 %}
+                    {% if s.Attendance >= 80 %}
 
                             <span class="attendance-good">
-                                {{ s.Attendance_Percentage }}%
+                                {{ s.Attendance }}%
                             </span>
 
-                        {% elif s.Attendance_Percentage >= 50 %}
+                        {% elif s.Attendance >= 50 %}
 
                             <span class="attendance-medium">
-                                {{ s.Attendance_Percentage }}%
+                                {{ s.Attendance }}%
                             </span>
 
-                        {% elif s.Attendance_Percentage >= 30 %}
+                        {% elif s.Attendance >= 30 %}
 
                             <span class="attendance-low">
-                                {{ s.Attendance_Percentage }}%
+                                {{ s.Attendance }}%
                             </span>
 
                         {% else %}
 
                             <span class="attendance-very-low">
-                                {{ s.Attendance_Percentage }}%
+                                {{ s.Attendance }}%
                             </span>
 
                         {% endif %}

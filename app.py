@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__)
@@ -12,6 +12,18 @@ RATION_FILE = "data/ration.csv"
 month_file = datetime.now().strftime("attendance_%Y_%m.csv")
 ATTENDANCE_FILE = f"data/attendance/{month_file}"
 
+# If current month's file doesn't exist
+if not os.path.exists(ATTENDANCE_FILE):
+
+    students_df = pd.read_csv(STUDENT_FILE)
+
+    attendance_df = pd.DataFrame({
+        "Student_ID": students_df["Student_ID"],
+        "Classes_Held": 0,
+        "Classes_Attended": 0
+    })
+
+    attendance_df.to_csv(ATTENDANCE_FILE, index=False)
 
 # Home Page
 @app.route('/')

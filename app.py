@@ -2,28 +2,47 @@ from flask import Flask, render_template, request, redirect
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+from database import engine
+from sqlalchemy import text
 
 app = Flask(__name__)
 
 STUDENT_FILE = "data/students.csv"
 RATION_FILE = "data/ration.csv"
 
-# Current month attendance file
-month_file = datetime.now().strftime("attendance_%Y_%m.csv")
-ATTENDANCE_FILE = f"data/attendance/{month_file}"
 
-# If current month's file doesn't exist
-if not os.path.exists(ATTENDANCE_FILE):
+with engine.begin() as conn:
 
-    students_df = pd.read_csv(STUDENT_FILE)
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS attendance (
 
-    attendance_df = pd.DataFrame({
-        "Student_ID": students_df["Student_ID"],
-        "Classes_Held": 0,
-        "Classes_Attended": 0
-    })
+            student_id VARCHAR(20) PRIMARY KEY,
+            classes_held INTEGER DEFAULT 0,
+            classes_attended INTEGER DEFAULT 0
 
-    attendance_df.to_csv(ATTENDANCE_FILE, index=False)
+        )
+    """))
+
+    count = conn.execute(
+        text("SELECT COUNT(*) FROM attendance")
+    ).scalar()
+
+    if count == 0:
+
+        students = pd.read_csv(STUDENT_FILE)
+
+        for sid in students["Student_ID"]:
+
+            conn.execute(
+                text("""
+                    INSERT INTO attendance
+                    (student_id, classes_held, classes_attended)
+
+                    VALUES
+                    (:sid,0,0)
+                """),
+                {"sid": sid}
+            )
 
 # Home Page
 @app.route('/')
@@ -40,7 +59,13 @@ def teacher():
 
     students_df = pd.read_csv(STUDENT_FILE)
 
-    attendance_df = pd.read_csv(ATTENDANCE_FILE)
+    attendance_df = pd.read_sql(text("""
+    SELECT
+        student_id AS "Student_ID",
+        classes_held AS "Classes_Held",
+        classes_attended AS "Classes_Attended"
+    FROM attendance
+    """), engine)
 
     classes = sorted(students_df['Class'].unique())
 
@@ -94,7 +119,7 @@ def teacher():
 @app.route('/submit_attendance', methods=['POST'])
 def submit_attendance():
 
-    attendance_df = pd.read_csv(ATTENDANCE_FILE)
+    conn = engine.connect()
 
     present_students = request.form.getlist('present')
 
@@ -106,25 +131,33 @@ def submit_attendance():
         students_df['Class'].astype(str) == selected_class
     ]
 
-    for _, student in class_students.iterrows():
+    with engine.begin() as conn:
 
-        sid = student['Student_ID']
+        for _, student in class_students.iterrows():
+        
+            sid = student['Student_ID']
 
-        # Increase total classes held
-        attendance_df.loc[
-            attendance_df['Student_ID'] == sid,
-            'Classes_Held'
-        ] += 1
+            # Increase total classes held
+            conn.execute(
+                text("""
+                    UPDATE attendance
+                    SET classes_held = classes_held + 1
+                    WHERE student_id = :sid
+                """),
+                {"sid": sid}
+            )
 
-        # If present increase attended
-        if sid in present_students:
+            # Increase attended if present
+            if sid in present_students:
 
-            attendance_df.loc[
-                attendance_df['Student_ID'] == sid,
-                'Classes_Attended'
-            ] += 1
-
-    attendance_df.to_csv(ATTENDANCE_FILE, index=False)
+                conn.execute(
+                    text("""
+                        UPDATE attendance
+                        SET classes_attended = classes_attended + 1
+                        WHERE student_id = :sid
+                    """),
+                    {"sid": sid}
+                )
 
     return redirect('/teacher')
 
@@ -143,7 +176,13 @@ def panchayat():
 
         students_df = pd.read_csv(STUDENT_FILE)
         ration_df = pd.read_csv(RATION_FILE)
-        attendance_df = pd.read_csv(ATTENDANCE_FILE)
+        attendance_df = pd.read_sql(text("""
+        SELECT
+            student_id AS "Student_ID",
+            classes_held AS "Classes_Held",
+            classes_attended AS "Classes_Attended"
+        FROM attendance
+        """), engine)
 
         ration_results = ration_df[
             ration_df['Ration_Card_No'] == ration_no

@@ -205,7 +205,7 @@ def submit_attendance():
                     {"sid": sid},
                 )
 
-    return redirect(url_for("teacher", class=selected_class))
+    return redirect(url_for("teacher", **{"class": selected_class}))
 
 
 @app.route("/panchayat", methods=["GET", "POST"])

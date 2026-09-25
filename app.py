@@ -1,47 +1,39 @@
-from flask import Flask, render_template, request, redirect
-import pandas as pd
-from datetime import datetime, timedelta
 import os
-from database import engine
+from flask import Flask, redirect, render_template, request
+import pandas as pd
 from sqlalchemy import text
 
+from database import engine
+
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "attendance-monitor-dev")
 
 STUDENT_FILE = "data/students.csv"
 RATION_FILE = "data/ration.csv"
 
 
 with engine.begin() as conn:
-
     conn.execute(text("""
         CREATE TABLE IF NOT EXISTS attendance (
-
             student_id VARCHAR(20) PRIMARY KEY,
             classes_held INTEGER DEFAULT 0,
             classes_attended INTEGER DEFAULT 0
-
         )
     """))
 
-    count = conn.execute(
-        text("SELECT COUNT(*) FROM attendance")
-    ).scalar()
+    count = conn.execute(text("SELECT COUNT(*) FROM attendance")).scalar()
 
     if count == 0:
-
         students = pd.read_csv(STUDENT_FILE)
-
         for sid in students["Student_ID"]:
-
             conn.execute(
                 text("""
                     INSERT INTO attendance
                     (student_id, classes_held, classes_attended)
-
                     VALUES
-                    (:sid,0,0)
+                    (:sid, 0, 0)
                 """),
-                {"sid": sid}
+                {"sid": str(sid)}
             )
 
 # Home Page
@@ -243,4 +235,6 @@ def panchayat():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', 5000))
+    app.run(host=host, port=port, debug=False)

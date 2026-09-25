@@ -3,21 +3,75 @@
 
 <head>
     <title>Panchayat Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+
+        .ration-directory {
+            margin-top: 30px;
+        }
+
+        .directory-search {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .directory-search input {
+            flex: 1;
+        }
+
+        .ration-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .ration-table th,
+        .ration-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .ration-table th {
+            font-weight: bold;
+        }
+
+        .view-button {
+            text-decoration: none;
+            padding: 7px 14px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 20px;
+        }
+
+    </style>
+
 </head>
 
 <body>
 
 <div class="navbar">
+
     <h2>Panchayat Dashboard</h2>
 
     <div class="nav-links">
         <a href="/">Home</a>
         <a href="/teacher">Teacher</a>
     </div>
+
 </div>
 
+
 <div class="container">
+
+    <!-- Existing Attendance Search -->
 
     <div class="card">
 
@@ -40,65 +94,89 @@
 
     </div>
 
+
+    <!-- Message -->
+
     {% if message %}
 
     <div class="card">
+
         <h3>{{ message }}</h3>
+
     </div>
 
     {% endif %}
+
+
+    <!-- Attendance Results -->
 
     {% if students %}
 
     <div class="card table-container">
 
-        <h2 class="heading">Attendance Details</h2>
+        <h2 class="heading">
+            Attendance Details
+        </h2>
 
         <table class="table">
 
             <tr>
+
                 <th>Student Name</th>
+
                 <th>Class</th>
+
                 <th>Attendance %</th>
+
                 <th>Status</th>
+
             </tr>
+
 
             {% for s in students %}
 
             <tr>
 
-                <td>{{ s.Student_Name }}</td>
-
-                <td>{{ s.Class }}</td>
-
-                <td>{{ s.Attendance }}%</td>
+                <td>
+                    {{ s.Student_Name }}
+                </td>
 
                 <td>
+                    {{ s.Class }}
+                </td>
+
+                <td>
+                    {{ s.Attendance }}%
+                </td>
+
+                <td>
+
                     {% if s.Attendance >= 80 %}
 
-                            <span class="attendance-good">
-                                {{ s.Attendance }}%
-                            </span>
+                        <span class="attendance-good">
+                            {{ s.Attendance }}%
+                        </span>
 
-                        {% elif s.Attendance >= 50 %}
+                    {% elif s.Attendance >= 50 %}
 
-                            <span class="attendance-medium">
-                                {{ s.Attendance }}%
-                            </span>
+                        <span class="attendance-medium">
+                            {{ s.Attendance }}%
+                        </span>
 
-                        {% elif s.Attendance >= 30 %}
+                    {% elif s.Attendance >= 30 %}
 
-                            <span class="attendance-low">
-                                {{ s.Attendance }}%
-                            </span>
+                        <span class="attendance-low">
+                            {{ s.Attendance }}%
+                        </span>
 
-                        {% else %}
+                    {% else %}
 
-                            <span class="attendance-very-low">
-                                {{ s.Attendance }}%
-                            </span>
+                        <span class="attendance-very-low">
+                            {{ s.Attendance }}%
+                        </span>
 
-                        {% endif %}
+                    {% endif %}
+
                 </td>
 
             </tr>
@@ -111,7 +189,125 @@
 
     {% endif %}
 
+
+    <!-- Ration Card Directory -->
+
+    <div class="card ration-directory">
+
+        <h2 class="heading">
+            Ration Card Directory
+        </h2>
+
+        <p>
+            Search and view available ration cards.
+        </p>
+
+
+        <!-- Directory Search -->
+
+        <form method="GET"
+              action="{{ url_for('panchayat') }}"
+              class="directory-search">
+
+            <input type="text"
+                   name="ration_no"
+                   placeholder="Search Ration Card Number">
+
+            <button type="submit">
+                Search
+            </button>
+
+        </form>
+
+
+        <!-- Ration Card Table -->
+
+        {% if ration_cards %}
+
+        <div class="table-container">
+
+            <table class="ration-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Ration Card No.</th>
+
+                        <th>Guardian Name</th>
+
+                        <th>Students</th>
+
+                        <th>Action</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for card in ration_cards %}
+
+                    <tr>
+
+                        <td>
+                            {{ card.Ration_Card_No }}
+                        </td>
+
+                        <td>
+                            {{ card.Guardian_Name }}
+                        </td>
+
+                        <td>
+
+                            {% if card.Student_Count == 1 %}
+                                1 Student
+                            {% else %}
+                                {{ card.Student_Count }} Students
+                            {% endif %}
+
+                        </td>
+
+                        <td>
+
+                            <a class="view-button"
+                               href="{{ url_for(
+                                   'panchayat',
+                                   ration_no=card.Ration_Card_No
+                               ) }}">
+
+                                View
+
+                            </a>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <div class="empty-message">
+
+            No ration cards available.
+
+        </div>
+
+        {% endif %}
+
+    </div>
+
+
 </div>
 
 </body>
+
 </html>

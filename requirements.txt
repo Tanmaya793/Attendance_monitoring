@@ -1,7 +1,6 @@
-flask
-pandas
-openpyxl
-gunicorn
-SQLAlchemy
-psycopg2-binary
-python-dotenv
+Flask==3.1.2
+pandas==2.3.2
+SQLAlchemy==2.0.43
+psycopg2-binary==2.9.10
+python-dotenv==1.1.1
+gunicorn==23.0.0

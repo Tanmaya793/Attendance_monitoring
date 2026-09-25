@@ -1,240 +1,291 @@
+import logging
 import os
-from flask import Flask, redirect, render_template, request
+from pathlib import Path
+
 import pandas as pd
+from flask import Flask, redirect, render_template, request, url_for
 from sqlalchemy import text
 
 from database import engine
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+STUDENT_FILE = DATA_DIR / "students.csv"
+RATION_FILE = DATA_DIR / "ration.csv"
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "attendance-monitor-dev")
 
-STUDENT_FILE = "data/students.csv"
-RATION_FILE = "data/ration.csv"
+# Development fallback keeps the app usable on a fresh machine.
+# Set SECRET_KEY in production through the hosting platform.
+app.config.update(
+    SECRET_KEY=os.getenv("SECRET_KEY", "dev-only-change-me"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("RENDER", "").lower() == "true",
+)
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 
-with engine.begin() as conn:
-    conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS attendance (
-            student_id VARCHAR(20) PRIMARY KEY,
-            classes_held INTEGER DEFAULT 0,
-            classes_attended INTEGER DEFAULT 0
+def load_students():
+    """Load the static student master data."""
+    return pd.read_csv(STUDENT_FILE, encoding="utf-8-sig", dtype={"Student_ID": str})
+
+
+def load_ration_data():
+    """Load the static ration-card mapping data."""
+    return pd.read_csv(RATION_FILE, encoding="utf-8-sig", dtype={"Ration_Card_No": str})
+
+
+def initialize_database():
+    """Create the attendance table and seed missing student records."""
+    if not STUDENT_FILE.exists():
+        raise FileNotFoundError(f"Required data file not found: {STUDENT_FILE}")
+
+    students_df = load_students()
+
+    required_columns = {"Student_ID", "Student_Name", "Class"}
+    missing = required_columns - set(students_df.columns)
+    if missing:
+        raise ValueError(
+            f"students.csv is missing required columns: {', '.join(sorted(missing))}"
         )
-    """))
 
-    count = conn.execute(text("SELECT COUNT(*) FROM attendance")).scalar()
-
-    if count == 0:
-        students = pd.read_csv(STUDENT_FILE)
-        for sid in students["Student_ID"]:
-            conn.execute(
-                text("""
-                    INSERT INTO attendance
-                    (student_id, classes_held, classes_attended)
-                    VALUES
-                    (:sid, 0, 0)
-                """),
-                {"sid": str(sid)}
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS attendance (
+                    student_id VARCHAR(20) PRIMARY KEY,
+                    classes_held INTEGER NOT NULL DEFAULT 0,
+                    classes_attended INTEGER NOT NULL DEFAULT 0
+                )
+                """
             )
+        )
 
-# Home Page
-@app.route('/')
+        existing_ids = {
+            str(row[0])
+            for row in conn.execute(text("SELECT student_id FROM attendance")).fetchall()
+        }
+
+        for sid in students_df["Student_ID"].dropna().astype(str):
+            if sid not in existing_ids:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO attendance
+                            (student_id, classes_held, classes_attended)
+                        VALUES
+                            (:sid, 0, 0)
+                        """
+                    ),
+                    {"sid": sid},
+                )
+
+
+def get_attendance_map():
+    """Return attendance rows keyed by student ID."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT student_id, classes_held, classes_attended
+                FROM attendance
+                """
+            )
+        ).mappings().all()
+
+    return {
+        str(row["student_id"]): {
+            "Classes_Held": int(row["classes_held"] or 0),
+            "Classes_Attended": int(row["classes_attended"] or 0),
+        }
+        for row in rows
+    }
+
+
+# Initialize once when the application module is loaded by Gunicorn.
+initialize_database()
+
+
+@app.route("/")
 def home():
-    return render_template('home.html')
+    return render_template("home.html")
 
 
-# Teacher Dashboard
-@app.route('/teacher', methods=['GET', 'POST'])
+@app.route("/teacher", methods=["GET", "POST"])
 def teacher():
-
     students = []
     selected_class = None
 
-    students_df = pd.read_csv(STUDENT_FILE)
+    students_df = load_students()
+    attendance_map = get_attendance_map()
 
-    attendance_df = pd.read_sql(text("""
-    SELECT
-        student_id AS "Student_ID",
-        classes_held AS "Classes_Held",
-        classes_attended AS "Classes_Attended"
-    FROM attendance
-    """), engine)
+    classes = sorted(
+        students_df["Class"].dropna().astype(str).unique(),
+        key=lambda value: (len(value), value),
+    )
 
-    classes = sorted(students_df['Class'].unique())
-
-    if request.method == 'POST':
-
-        selected_class = request.form['class']
+    if request.method == "POST":
+        selected_class = request.form.get("class", "").strip()
 
         class_students = students_df[
-            students_df['Class'].astype(str) == selected_class
+            students_df["Class"].astype(str) == selected_class
         ]
 
         for _, student in class_students.iterrows():
+            sid = str(student["Student_ID"])
+            attendance_info = attendance_map.get(
+                sid, {"Classes_Held": 0, "Classes_Attended": 0}
+            )
 
-            sid = student['Student_ID']
+            held = attendance_info["Classes_Held"]
+            attended = attendance_info["Classes_Attended"]
+            percentage = round((attended / held) * 100, 2) if held else 0
 
-            attendance_info = attendance_df[
-                attendance_df['Student_ID'] == sid
-            ]
-
-            held = 0
-            attended = 0
-            percentage = 0
-
-            if not attendance_info.empty:
-
-                held = attendance_info.iloc[0]['Classes_Held']
-                attended = attendance_info.iloc[0]['Classes_Attended']
-
-                if held > 0:
-                    percentage = round(
-                        (attended / held) * 100,
-                        2
-                    )
-
-            students.append({
-                'Student_ID': sid,
-                'Student_Name': student['Student_Name'],
-                'Classes_Held': held,
-                'Classes_Attended': attended,
-                'Attendance_Percentage': percentage
-            })
+            students.append(
+                {
+                    "Student_ID": sid,
+                    "Student_Name": student["Student_Name"],
+                    "Classes_Held": held,
+                    "Classes_Attended": attended,
+                    "Attendance_Percentage": percentage,
+                }
+            )
 
     return render_template(
-        'teacher.html',
+        "teacher.html",
         classes=classes,
         students=students,
-        selected_class=selected_class
+        selected_class=selected_class,
     )
 
-# Submit Attendance
-@app.route('/submit_attendance', methods=['POST'])
+
+@app.route("/submit_attendance", methods=["POST"])
 def submit_attendance():
+    present_students = set(request.form.getlist("present"))
+    selected_class = request.form.get("selected_class", "").strip()
 
-    conn = engine.connect()
+    if not selected_class:
+        return redirect(url_for("teacher"))
 
-    present_students = request.form.getlist('present')
-
-    students_df = pd.read_csv(STUDENT_FILE)
-
-    selected_class = request.form['selected_class']
-
+    students_df = load_students()
     class_students = students_df[
-        students_df['Class'].astype(str) == selected_class
+        students_df["Class"].astype(str) == selected_class
     ]
 
     with engine.begin() as conn:
-
         for _, student in class_students.iterrows():
-        
-            sid = student['Student_ID']
+            sid = str(student["Student_ID"])
 
-            # Increase total classes held
+            # Every submission represents one class held.
             conn.execute(
-                text("""
+                text(
+                    """
                     UPDATE attendance
                     SET classes_held = classes_held + 1
                     WHERE student_id = :sid
-                """),
-                {"sid": sid}
+                    """
+                ),
+                {"sid": sid},
             )
 
-            # Increase attended if present
+            # Only checked/present students receive an attendance increment.
             if sid in present_students:
-
                 conn.execute(
-                    text("""
+                    text(
+                        """
                         UPDATE attendance
                         SET classes_attended = classes_attended + 1
                         WHERE student_id = :sid
-                    """),
-                    {"sid": sid}
+                        """
+                    ),
+                    {"sid": sid},
                 )
 
-    return redirect('/teacher')
+    return redirect(url_for("teacher", class=selected_class))
 
 
-# Panchayat Dashboard
-@app.route('/panchayat', methods=['GET', 'POST'])
+@app.route("/panchayat", methods=["GET", "POST"])
 def panchayat():
-
     students = []
     message = ""
 
-    if request.method == 'POST':
+    if request.method == "POST":
+        raw_ration_no = request.form.get("ration_no", "").strip().upper()
 
-        ration_no = request.form['ration_no']
-        ration_no = "RC"+ration_no
+        if raw_ration_no.startswith("RC"):
+            ration_no = raw_ration_no
+        else:
+            ration_no = f"RC{raw_ration_no}"
 
-        students_df = pd.read_csv(STUDENT_FILE)
-        ration_df = pd.read_csv(RATION_FILE)
-        attendance_df = pd.read_sql(text("""
-        SELECT
-            student_id AS "Student_ID",
-            classes_held AS "Classes_Held",
-            classes_attended AS "Classes_Attended"
-        FROM attendance
-        """), engine)
+        students_df = load_students()
+        ration_df = load_ration_data()
+        attendance_map = get_attendance_map()
 
         ration_results = ration_df[
-            ration_df['Ration_Card_No'] == ration_no
+            ration_df["Ration_Card_No"].astype(str).str.upper() == ration_no
         ]
 
         if not ration_results.empty:
-
             for _, row in ration_results.iterrows():
-
-                student_name = row['Student_Name']
+                student_name = str(row["Student_Name"])
 
                 student_info = students_df[
-                    students_df['Student_Name'] == student_name
+                    students_df["Student_Name"].astype(str) == student_name
                 ]
 
-                if not student_info.empty:
+                if student_info.empty:
+                    continue
 
-                    student_id = student_info.iloc[0]['Student_ID']
+                student_row = student_info.iloc[0]
+                student_id = str(student_row["Student_ID"])
 
-                    attendance_info = attendance_df[
-                        attendance_df['Student_ID'] == student_id
-                    ]
+                attendance_info = attendance_map.get(
+                    student_id, {"Classes_Held": 0, "Classes_Attended": 0}
+                )
 
-                    if not attendance_info.empty:
+                held = attendance_info["Classes_Held"]
+                attended = attendance_info["Classes_Attended"]
+                percentage = round((attended / held) * 100, 2) if held else 0
 
-                        held = attendance_info.iloc[0]['Classes_Held']
-                        attended = attendance_info.iloc[0]['Classes_Attended']
-
-                        percentage = 0
-
-                        if held > 0:
-                            percentage = round(
-                                (attended / held) * 100,
-                                2
-                            )
-
-                        student_data = {
-                            'Student_Name': student_name,
-                            'Class': student_info.iloc[0]['Class'],
-                            'Attendance': percentage
-                        }
-
-                        if percentage < 75:
-                            student_data['Warning'] = "⚠ Low Attendance"
-                        else:
-                            student_data['Warning'] = "✅ Good Attendance"
-
-                        students.append(student_data)
-
+                students.append(
+                    {
+                        "Student_Name": student_name,
+                        "Class": student_row["Class"],
+                        "Attendance": percentage,
+                        "Warning": (
+                            "⚠ Low Attendance"
+                            if percentage < 75
+                            else "✅ Good Attendance"
+                        ),
+                    }
+                )
         else:
             message = "Ration Card Not Found"
 
     return render_template(
-        'panchayat.html',
+        "panchayat.html",
         students=students,
-        message=message
+        message=message,
     )
 
 
-if __name__ == '__main__':
-    host = os.getenv('HOST', '0.0.0.0')
-    port = int(os.getenv('PORT', 5000))
+@app.get("/health")
+def health():
+    """Simple health endpoint for hosting-platform health checks."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ok"}, 200
+    except Exception:
+        logger.exception("Health check failed")
+        return {"status": "error"}, 503
+
+
+if __name__ == "__main__":
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "5000"))
     app.run(host=host, port=port, debug=False)
